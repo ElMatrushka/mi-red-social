@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
-import { buscarGifs, traerTrending } from "@/lib/giphyClient";
+import { buscarGifs, traerTrending } from "@/lib/giphy";
 
 export default function PaginaGrupo() {
   const params = useParams();
