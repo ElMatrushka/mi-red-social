@@ -89,7 +89,6 @@ export default function Home() {
 
   const limpiarPopup = () => { setNombreGrupo(""); setDescripcionGrupo(""); setArchivoMiniatura(null); setPreviewMiniatura(""); };
 
-  // ✅ FIX 3: session?.user?. idGrupo → session?.user?.id
   const crearGrupo = async () => {
     if (nombreGrupo.trim() === "" || creandoGrupo) return;
     setCreandoGrupo(true);
@@ -151,7 +150,6 @@ export default function Home() {
     setPostsAbiertos(nuevosAbiertos);
   };
 
-  // ✅ FIX 1: Agregada la } que faltaba en { data: { session } }
   const publicarComentario = async (postId: string) => {
     const textoActual = textosComentarios[postId] || "";
     const { data: { session } } = await supabase.auth.getSession();
@@ -171,7 +169,6 @@ export default function Home() {
     setListaComentarios((prevState) => { const newComments = { ...prevState }; newComments[postId] = newComments[postId].map((c: any) => c.id === comentarioId ? { ...c, score: c.score + cambioEnScore, userVote: votoActual === tipo ? 0 : tipo } : c).sort((a: any, b: any) => b.score - a.score); return newComments; });
   };
 
-  // ✅ FIX 2: return n; };  →  return n; });   (faltaba ) para cerrar setter(...))
   const toggleTextoExpandido = (setter: any, id: string) => { setter((prev: Set<string>) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }); };
 
   return (
@@ -213,7 +210,18 @@ export default function Home() {
           {feedPosts.length === 0 ? (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500"><p className="text-lg font-medium mb-2">Tu inicio está vacío</p><p className="text-sm">Usa la barra de búsqueda de arriba para encontrar comunidades.</p></div>) : (feedPosts.map((post) => (
             <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
               <div className="flex items-center gap-3 mb-3"><img src={post.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=Anonimo&background=gray&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/><div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1">{new Date(post.creado_en).toLocaleDateString()} - {new Date(post.creado_en).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}</span></p></div></div>
-              <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? (<>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
+              <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">
+                {post.mensaje?.length > 200 && !postsExpandidos.has(post.id)
+                  ? post.mensaje.substring(0, 200) + "... "
+                  : post.mensaje
+                }
+                {post.mensaje?.length > 200 && !postsExpandidos.has(post.id) && (
+                  <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button>
+                )}
+                {post.mensaje?.length > 200 && postsExpandidos.has(post.id) && (
+                  <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>
+                )}
+              </p>
               {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
                 <span onClick={() => toggleLikePost(post.id)} className={`px-3 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors text-xs sm:text-sm ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
@@ -238,11 +246,14 @@ export default function Home() {
                               </div>
                             </div>
                             <p className="text-[15px] text-gray-700 break-words">
-                              {(c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)) ? (
-                                <>{c.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button>
-                                </>
-                              ) : c.mensaje}
-                              {(c.mensaje?.length > 200 && comentariosExpandidos.has(c.id)) && (
+                              {c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)
+                                ? c.mensaje.substring(0, 200) + "... "
+                                : c.mensaje
+                              }
+                              {c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id) && (
+                                <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button>
+                              )}
+                              {c.mensaje?.length > 200 && comentariosExpandidos.has(c.id) && (
                                 <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline ml-1">Ver menos</button>
                               )}
                             </p>
