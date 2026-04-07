@@ -164,21 +164,56 @@ export default function Home() {
       </aside>
 
       <div className="flex-1 max-w-[600px]">
+        {/* --- BARRA MÓVIL (Solo se ve en celulares) --- */}
+        <div className="flex lg:hidden flex-col gap-3 mb-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex justify-between items-center">
+            {perfil ? (
+              <Link href="/configurar-perfil" className="flex items-center gap-2">
+                <img src={perfil.avatar_url} className="w-9 h-9 rounded-full border border-gray-200" alt="avatar"/>
+                <span className="font-semibold text-sm text-gray-800 truncate max-w-[120px]">{perfil.username}</span>
+              </Link>
+            ) : (
+              <Link href="/login" className="text-[#1877F2] font-semibold text-sm flex items-center gap-1">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                Iniciar Sesion
+              </Link>
+            )}
+            <div className="flex items-center gap-2">
+              {usuario ? (<button onClick={cerrarSesion} className="text-xs text-gray-400 hover:text-red-500 cursor-pointer">Salir</button>) : null}
+              <button onClick={() => setMostrarPopup(true)} className="bg-[#1877F2] text-white px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer hover:bg-[#166FE5]">Crear Grupo</button>
+            </div>
+          </div>
+          
+          {grupos.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex gap-2 overflow-x-auto">
+              {grupos.map((grupo) => (
+                <Link key={grupo} href={`/grupo/${grupo}`} className="flex-shrink-0 px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-800 hover:bg-gray-200 transition-colors truncate max-w-[150px]">
+                  {grupo}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* --- FIN BARRA MÓVIL --- */}
+
         <div className="flex flex-col gap-4">
           {feedPosts.length === 0 ? (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500"><p className="text-lg font-medium mb-2">Tu inicio esta vacio</p><p className="text-sm">Crea un grupo o unete a uno existente para ver publicaciones aqui.</p></div>) : (
             feedPosts.map((post) => (
               <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <img src={post.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/>
-                  <div className="flex-1"><p className="font-semibold text-[15px] text-gray-900">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1"><Link href={`/grupo/${post.grupo_nombre}`} className="font-semibold text-[#1877F2] hover:underline">{decodeURIComponent(post.grupo_nombre)}</Link> - {new Date(post.creado_en).toLocaleDateString()}</span></p></div>
+                  <div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1"><Link href={`/grupo/${post.grupo_nombre}`} className="font-semibold text-[#1877F2] hover:underline">{decodeURIComponent(post.grupo_nombre)}</Link> - {new Date(post.creado_en).toLocaleDateString()}</span></p></div>
                 </div>
                 <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? <>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
-                {post.imagen_url ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />) : null}
+                
+                {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
+
                 <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
-                  <span onClick={() => toggleLikePost(post.id)} className={`px-4 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
-                  <span onClick={() => toggleComentarios(post.id)} className={`px-4 py-1 rounded cursor-pointer ${postsAbiertos.includes(post.id) ? 'font-bold text-gray-900 bg-gray-100' : 'hover:bg-gray-100'}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
-                  {post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-4 py-1 rounded cursor-pointer">Delete</span>) : null}
+                  <span onClick={() => toggleLikePost(post.id)} className={`px-3 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors text-xs sm:text-sm ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
+                  <span onClick={() => toggleComentarios(post.id)} className={`px-3 py-1 rounded cursor-pointer text-xs sm:text-sm ${postsAbiertos.includes(post.id) ? "font-bold text-gray-900 bg-gray-100" : "hover:bg-gray-100"}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
+                  {post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-3 py-1 rounded cursor-pointer text-xs sm:text-sm">Delete</span>) : null}
                 </div>
+                
                 {postsAbiertos.includes(post.id) ? (
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="flex gap-2 mb-4">
@@ -192,7 +227,7 @@ export default function Home() {
                             <img src={c.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-8 h-8 rounded-full shrink-0 mt-0.5" alt="avatar"/>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between mb-0.5">
-                                <p className="font-semibold text-[13px] text-gray-800">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p>
+                                <p className="font-semibold text-[13px] text-gray-800 truncate mr-2">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p>
                                 <div className="flex items-center gap-1 shrink-0">
                                   <button onClick={() => votarComentario(post.id, c.id, 1)} className={`hover:text-orange-500 transition-colors ${c.userVote === 1 ? 'text-orange-500' : 'text-gray-400'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button>
                                   <span className={`text-[11px] font-bold ${c.userVote === 1 ? 'text-orange-500' : c.userVote === -1 ? 'text-blue-500' : 'text-gray-500'}`}>{c.score || 0}</span>
