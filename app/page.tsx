@@ -6,6 +6,7 @@ import Link from "next/link";
 
 export default function Home() {
   const [mostrarPopup, setMostrarPopup] = useState(false);
+  const [creandoGrupo, setCreandoGrupo] = useState(false); // NUEVO ESTADO PARA EVITAR DOBLE CLICK
   const [nombreGrupo, setNombreGrupo] = useState("");
   const [descripcionGrupo, setDescripcionGrupo] = useState("");
   const [archivoMiniatura, setArchivoMiniatura] = useState<any>(null);
@@ -31,14 +32,9 @@ export default function Home() {
       if (session?.user) { traerPerfil(session.user.id); traerMisGrupos(); } else { setPerfil(null); setMisGrupos([]); }
       traerFeed(); 
     });
-    supabase.auth.getSession().then(({ data: { session } }) => { 
-      if (session?.user) { traerPerfil(session.user.id); traerMisGrupos(); } 
-    });
-    
-    // Escuchar cuando alguien se une a un grupo desde la barra de búsqueda global
+    supabase.auth.getSession().then(({ data: { session } }) => { if (session?.user) { traerPerfil(session.user.id); traerMisGrupos(); } });
     const handleUpdate = () => { traerMisGrupos(); traerFeed(); };
     window.addEventListener('grupo-actualizado', handleUpdate);
-    
     return () => { subscription.unsubscribe(); window.removeEventListener('grupo-actualizado', handleUpdate); };
   }, []);
 
@@ -77,10 +73,10 @@ export default function Home() {
   const limpiarPopup = () => { setNombreGrupo(""); setDescripcionGrupo(""); setArchivoMiniatura(null); setPreviewMiniatura(""); };
 
   const crearGrupo = async () => {
-    if (nombreGrupo.trim() === "") return;
+    if (nombreGrupo.trim() === "" || creandoGrupo) return;
+    setCreandoGrupo(true); // BLOQUEAR BOTÓN
     let thumbnailUrl = null;
     
-    // Subir imagen si existe
     if (archivoMiniatura) {
       const ext = archivoMiniatura.name.split('.').pop();
       const path = `grupo-thumbnails/${nombreGrupo.replace(/\s/g, '_')}_${Date.now()}.${ext}`;
@@ -95,7 +91,11 @@ export default function Home() {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) await supabase.from("miembros").insert([{ user_id: session.user.id, grupo_nombre: nombreGrupo }]);
     
-    limpiarPopup(); setMostrarPopup(false); traerMisGrupos(); traerFeed();
+    setCreandoGrupo(false); // DESBLOQUEAR BOTÓN
+    limpiarPopup(); 
+    setMostrarPopup(false); // CERRAR VENTANA
+    traerMisGrupos(); 
+    traerFeed();
   };
 
   const cerrarSesion = async () => { await supabase.auth.signOut(); };
@@ -113,7 +113,7 @@ export default function Home() {
     }
   };
 
-  const eliminarPost = async (postId: string) => { if (!window.confirm("Are you sure you want to delete this post?")) return; await supabase.from("posts").delete().eq("id", postId); traerFeed(); };
+  const eliminarPost = async (postId: string) => { if (!window.confirm("Are you sure?")) return; await supabase.from("posts").delete().eq("id", postId); traerFeed(); };
 
   const traerComentarios = async (postId: string) => {
     const { data } = await supabase.from("comentarios").select("*").eq("post_id", postId).order("creado_en", { ascending: true });
@@ -170,9 +170,7 @@ export default function Home() {
         <div className="fixed w-[280px]">
           {perfil ? (
             <div className="flex flex-col items-center p-4">
-              <Link href="/configurar-perfil" className="group relative block">
-                <img src={perfil.avatar_url} className="w-16 h-16 rounded-full border-2 border-white shadow-md group-hover:opacity-80 transition-opacity" alt="avatar"/>
-              </Link>
+              <Link href="/configurar-perfil" className="group relative block"><img src={perfil.avatar_url} className="w-16 h-16 rounded-full border-2 border-white shadow-md group-hover:opacity-80 transition-opacity" alt="avatar"/></Link>
               <Link href="/configurar-perfil" className="font-semibold text-[15px] text-gray-800 truncate mt-2 hover:underline">{perfil.username}</Link>
             </div>
           ) : (<Link href="/login" className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors mb-1"><div className="w-9 h-9 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm">?</div><span className="font-medium text-[15px] text-[#1877F2]">Iniciar Sesion</span></Link>)}
@@ -207,10 +205,7 @@ export default function Home() {
         <div className="flex flex-col gap-4">
           {feedPosts.length === 0 ? (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500"><p className="text-lg font-medium mb-2">Tu inicio está vacío</p><p className="text-sm">Usa la barra de búsqueda de arriba para encontrar comunidades y unirte a ellas.</p></div>) : (feedPosts.map((post) => (
             <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <img src={post.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/>
-                <div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1"><Link href={`/grupo/${post.grupo_nombre}`} className="font-semibold text-[#1877F2] hover:underline">{decodeURIComponent(post.grupo_nombre)}</Link> - {new Date(post.creado_en).toLocaleDateString()}</span></p></div>
-              </div>
+              <div className="flex items-center gap-3 mb-3"><img src={post.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/><div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1"><Link href={`/grupo/${post.grupo_nombre}`} className="font-semibold text-[#1877F2] hover:underline">{decodeURIComponent(post.grupo_nombre)}</Link> - {new Date(post.creado_en).toLocaleDateString()}</span></p></div></div>
               <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? <>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
               {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
@@ -218,12 +213,7 @@ export default function Home() {
                 <span onClick={() => toggleComentarios(post.id)} className={`px-3 py-1 rounded cursor-pointer text-xs sm:text-sm ${postsAbiertos.includes(post.id) ? "font-bold text-gray-900 bg-gray-100" : "hover:bg-gray-100"}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
                 {post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-3 py-1 rounded cursor-pointer text-xs sm:text-sm">Delete</span>) : null}
               </div>
-              {postsAbiertos.includes(post.id) && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="flex gap-2 mb-4"><img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff"} className="w-8 h-8 rounded-full shrink-0" alt="avatar"/><input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e) => setTextosComentarios(prev => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && publicarComentario(post.id)} /></div>
-                  {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 && (<div className="flex flex-col gap-3">{listaComentarios[post.id].map((c: any) => (<div key={c.id} className="flex gap-2 items-start"><img src={c.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-8 h-8 rounded-full shrink-0 mt-0.5" alt="avatar"/><div className="flex-1 min-w-0"><div className="flex items-center justify-between mb-0.5"><p className="font-semibold text-[13px] text-gray-800 truncate mr-2">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p><div className="flex items-center gap-1 shrink-0"><button onClick={() => votarComentario(post.id, c.id, 1)} className={`hover:text-orange-500 transition-colors ${c.userVote === 1 ? 'text-orange-500' : 'text-gray-400'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button><span className={`text-[11px] font-bold ${c.userVote === 1 ? 'text-orange-500' : c.userVote === -1 ? 'text-blue-500' : 'text-gray-500'}`}>{c.score || 0}</span><button onClick={() => votarComentario(post.id, c.id, -1)} className={`hover:text-blue-500 transition-colors ${c.userVote === -1 ? 'text-blue-500' : 'text-gray-400'}`}><svg className="w-4 h-4 rotate-180" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button></div></div><p className="text-[15px] text-gray-700 break-words">{(c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)) ? <>{c.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button></> : c.mensaje}{(c.mensaje?.length > 200 && comentariosExpandidos.has(c.id)) && <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline ml-1">Ver menos</button>}</p></div></div>))}</div>)}
-                </div>
-              )}
+              {postsAbiertos.includes(post.id) && (<div className="mt-3 pt-3 border-t border-gray-100"><div className="flex gap-2 mb-4"><img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff" className="w-8 h-8 rounded-full shrink-0" alt="avatar"/><input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e) => setTextosComentarios(prev => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && publicarComentario(post.id)} /></div>{Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 && (<div className="flex flex-col gap-3">{listaComentarios[post.id].map((c: any) => (<div key={c.id} className="flex gap-2 items-start"><img src={c.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-8 h-8 rounded-full shrink-0 mt-0.5" alt="avatar"/><div className="flex-1 min-w-0"><div className="flex items-center justify-between mb-0.5"><p className="font-semibold text-[13px] text-gray-800 truncate mr-2">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p><div className="flex items-center gap-1 shrink-0"><button onClick={() => votarComentario(post.id, c.id, 1)} className={`hover:text-orange-500 transition-colors ${c.userVote === 1 ? 'text-orange-500' : 'text-gray-400'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button><span className={`text-[11px] font-bold ${c.userVote === 1 ? 'text-orange-500' : c.userVote === -1 ? 'text-blue-500' : 'text-gray-500'}`}>{c.score || 0}</span><button onClick={() => votarComentario(post.id, c.id, -1)} className={`hover:text-blue-500 transition-colors ${c.userVote === -1 ? 'text-blue-500' : 'text-gray-400'}`}><svg className="w-4 h-4 rotate-180" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button></div></div><p className="text-[15px] text-gray-700 break-words">{(c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)) ? <>{c.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button></> : c.mensaje}{(c.mensaje?.length > 200 && comentariosExpandidos.has(c.id)) && <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline ml-1">Ver menos</button>}</p></div></div>))}</div>)}</div>)}
             </div>
           )))}
         </div>
@@ -234,7 +224,6 @@ export default function Home() {
           <div className="bg-white p-0 rounded-lg shadow-xl text-black max-w-md w-full mx-4 overflow-hidden">
             <div className="bg-[#1877F2] p-4"><h2 className="text-xl font-bold text-white">Crear un grupo</h2><p className="text-sm text-blue-100">Dale una identidad a tu comunidad</p></div>
             <div className="p-4 flex flex-col gap-3">
-              {/* SUBIDA DE MINIATURA */}
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <input type="file" accept="image/png, image/jpeg" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={(e) => { const file = e.target.files[0]; if(file) { setArchivoMiniatura(file); setPreviewMiniatura(URL.createObjectURL(file)); } }} />
@@ -244,21 +233,20 @@ export default function Home() {
                 </div>
                 <div className="flex-1 text-sm text-gray-500">Sube una imagen de miniatura para tu grupo (Opcional).</div>
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del grupo</label>
                 <input type="text" placeholder="Ej: Amantes del Cafe" className="w-full p-3 border border-gray-300 rounded-md text-black focus:outline-none focus:border-[#1877F2] focus:ring-1 focus:ring-[#1877F2]" value={nombreGrupo} onChange={(e) => setNombreGrupo(e.target.value)} />
               </div>
               <div>
-                <div className="flex justify-between mb-1">
-                  <label className="block text-sm font-medium text-gray-700">Descripción</label>
-                  <span className="text-xs text-gray-400">{descripcionGrupo.length}/50</span>
-                </div>
+                <div className="flex justify-between mb-1"><label className="block text-sm font-medium text-gray-700">Descripción</label><span className="text-xs text-gray-400">{descripcionGrupo.length}/50</span></div>
                 <input type="text" maxLength={50} placeholder="¿De qué trata este grupo?" className="w-full p-3 border border-gray-300 rounded-md text-black focus:outline-none focus:border-[#1877F2] focus:ring-1 focus:ring-[#1877F2]" value={descripcionGrupo} onChange={(e) => setDescripcionGrupo(e.target.value)} />
               </div>
               <div className="flex justify-end gap-2 border-t border-gray-200 pt-3">
                 <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-md font-medium cursor-pointer" onClick={() => { limpiarPopup(); setMostrarPopup(false); }}>Cancelar</button>
-                <button className="bg-[#1877F2] hover:bg-[#166FE5] text-white py-2 px-4 rounded-md font-medium cursor-pointer" onClick={crearGrupo}>Crear Grupo</button>
+                {/* BOTÓN MEJORADO PARA EVITAR DOBLE CLICK */}
+                <button className="bg-[#1877F2] hover:bg-[#166FE5] text-white py-2 px-4 rounded-md font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" onClick={crearGrupo} disabled={creandoGrupo}>
+                  {creandoGrupo ? "Creando..." : "Crear Grupo"}
+                </button>
               </div>
             </div>
           </div>
