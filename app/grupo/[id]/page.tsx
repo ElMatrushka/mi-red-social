@@ -177,12 +177,12 @@ export default function PaginaGrupo() {
     if (!usuario) return;
     if (likedPosts.has(postId)) {
       await supabase.from("likes_posts").delete().eq("post_id", postId).eq("user_id", usuario.id);
-      setLikedPosts((prev: any) => { const n = new Set(prev); n.delete(postId); return n; });
-      setPosts((prev: any) => prev.map((p: any) => p.id === postId ? { ...p, likes: p.likes - 1 } : p));
+      setLikedPosts((prev) => { const n = new Set(prev); n.delete(postId); return n; });
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: p.likes - 1 } : p));
     } else {
       await supabase.from("likes_posts").insert([{ post_id: postId, user_id: usuario.id }]);
-      setLikedPosts((prev: any) => new Set(prev).add(postId));
-      setPosts((prev: any) => prev.map((p: any) => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
+      setLikedPosts((prev) => new Set(prev).add(postId));
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
     }
   };
 
@@ -197,8 +197,8 @@ export default function PaginaGrupo() {
       await supabase.from("votos_comentarios").upsert({ comentario_id: comentarioId, user_id: usuario.id, tipo_voto: tipo }, { onConflict: 'user_id,comentario_id' });
       if (votoActual !== 0) cambioEnScore = tipo * 2; 
     }
-    setUserVotes((prev: any) => new Map(prev).set(comentarioId, votoActual === tipo ? 0 : tipo));
-    setListaComentarios((prevState: any) => {
+    setUserVotes((prev) => new Map(prev).set(comentarioId, votoActual === tipo ? 0 : tipo));
+    setListaComentarios((prevState) => {
       const newComments = { ...prevState };
       newComments[postId] = newComments[postId].map((c: any) => c.id === comentarioId ? { ...c, score: c.score + cambioEnScore, userVote: votoActual === tipo ? 0 : tipo } : c).sort((a: any, b: any) => b.score - a.score);
       return newComments;
@@ -280,7 +280,7 @@ export default function PaginaGrupo() {
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="flex gap-2 mb-4">
                       <img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff"} className="w-8 h-8 rounded-full shrink-0" alt="avatar"/>
-                      <input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e: any) => setTextosComentarios((prev: any) => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e: any) => e.key === "Enter" && publicarComentario(post.id)} />
+                      <input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e) => setTextosComentarios((prev) => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && publicarComentario(post.id)} />
                     </div>
                     {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? (
                       <div className="flex flex-col gap-3">
@@ -315,7 +315,7 @@ export default function PaginaGrupo() {
           <div className="bg-white rounded-xl shadow-2xl text-black w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden">
             <div className="p-4 border-b border-gray-200 flex gap-3 bg-white">
               <button onClick={() => setMostrarBuscadorGif(false)} className="text-gray-500 hover:text-black font-bold text-xl cursor-pointer">✕</button>
-              <input type="text" className="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-sm text-gray-800 placeholder-gray-500 focus:ring-2 focus:ring-purple-500" placeholder="Buscar GIFs..." value={busquedaGif} onChange={(e: any) => setBusquedaGif(e.target.value)} onKeyDown={(e: any) => e.key === "Enter" && handleBuscarGifs(busquedaGif)} autoFocus />
+              <input type="text" className="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-sm text-gray-800 placeholder-gray-500 focus:ring-2 focus:ring-purple-500" placeholder="Buscar GIFs..." value={busquedaGif} onChange={(e) => setBusquedaGif(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleBuscarGifs(busquedaGif)} autoFocus />
               <button onClick={() => handleBuscarGifs(busquedaGif)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 rounded-full font-medium text-sm cursor-pointer">Buscar</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
