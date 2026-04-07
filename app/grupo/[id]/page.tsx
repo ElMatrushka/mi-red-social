@@ -122,7 +122,7 @@ export default function PaginaGrupo() {
   };
 
   const publicarPost = async () => {
-    const { data: { session } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     if ((!nuevoPost.trim() && !archivoASubir && !imagenPreview) || !session?.user || !esMiembro || !perfil) return;
     let urlImagen = imagenPreview; 
     if (archivoASubir) {
@@ -144,6 +144,17 @@ export default function PaginaGrupo() {
     setPostsAbiertos(nuevosAbiertos);
   };
 
+  // ✅ FIX 1: Renombrada de toggleComentarios a publicarComentario
+  // ✅ FIX 2: Agregada la } que faltaba en { data: { session } }
+  const publicarComentario = async (postId: string) => {
+    const textoActual = textosComentarios[postId] || "";
+    const { data: { session } } = await supabase.auth.getSession();
+    if (textoActual.trim() === "" || !session?.user || !perfil) return;
+    await supabase.from("comentarios").insert([{ post_id: postId, user_id: session.user.id, autor_username: perfil.username, mensaje: textoActual }]);
+    const textosLimpios = { ...textosComentarios }; textosLimpios[postId] = ""; setTextosComentarios(textosLimpios);
+    await traerComentarios(postId);
+  };
+
   const traerComentarios = async (postId: string) => {
     const { data } = await supabase.from("comentarios").select("*").eq("post_id", postId).order("creado_en", { ascending: true });
     if (!data || data.length === 0) return;
@@ -163,15 +174,6 @@ export default function PaginaGrupo() {
     } else {
       const newState = { ...listaComentarios }; newState[postId] = data.map((c: any) => ({ ...c, autor_perfil: mapaPerfiles.get(c.user_id) || null, score: 0, userVote: 0 })); setListaComentarios(newState);
     }
-  };
-
-  const toggleComentarios = async (postId: string) => {
-    const textoActual = textosComentarios[postId] || "";
-    const { data: { session } = await supabase.auth.getSession();
-    if (textoActual.trim() === "" || !session?.user || !perfil) return;
-    await supabase.from("comentarios").insert([{ post_id: postId, user_id: session.user.id, autor_username: perfil.username, mensaje: textoActual }]);
-    const textosLimpios = { ...textosComentarios }; textosLimpios[postId] = ""; setTextosComentarios(textosLimpios);
-    await traerComentarios(postId);
   };
 
   const votarComentario = async (postId: string, comentarioId: string, tipo: 1 | -1) => {
@@ -218,16 +220,15 @@ export default function PaginaGrupo() {
           ) : (<Link href="/login" className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors mb-1"><div className="w-9 h-9 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm">?</div><span className="font-medium text-[15px] text-[#1877F2]">Iniciar Sesion</span></Link>)}
           <hr className="my-2 border-gray-300" />
           
-          {/* PLACAS DE ROL */}
           {miRol === 'admin' && (
             <div className="mx-2 p-2 bg-red-100 text-red-700 rounded-lg flex items-center gap-2 text-sm font-bold">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 011-16 0zm-2-8a6 6 0 11-12 0 6 6 0 0112 0zm-2-4a4 4 0 10-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-2 0a6 6 0 11-12 0 6 6 0 0112 0z" clipRule="evenodd" /></svg>
               Administrador
             </div>
           )}
           {miRol === 'moderador' && (
             <div className="mx-2 p-2 bg-blue-100 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-bold">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 011-6 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10V9a3 3 0 00-3-3H8a3 3 0 00-3-3H5a3 3 0 00-3-3v1m14-4V8a3 3 0 00-3-3H8m4 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               Moderador
             </div>
           )}
@@ -246,7 +247,7 @@ export default function PaginaGrupo() {
       <div className="flex-1 max-w-[600px] min-w-0">
         <div className="flex lg:hidden flex-col gap-3 mb-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex justify-between items-center">
-            {perfil ? (<Link href="/configurar-perfil" className="flex items-center gap-2"><img src={perfil.avatar_url} className="w-9 h-9 rounded-full border border-gray-200" alt="avatar"/><span className="font-semibold text-sm text-gray-800 truncate max-w-[120px]">{perfil.username}</span></Link>) : (<Link href="/login" className="text-[#1877F2] font-semibold text-sm flex items-center gap-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3-3h7a3 3 0 013 3 3v1" /></svg>Iniciar Sesion</Link>)}
+            {perfil ? (<Link href="/configurar-perfil" className="flex items-center gap-2"><img src={perfil.avatar_url} className="w-9 h-9 rounded-full border border-gray-200" alt="avatar"/><span className="font-semibold text-sm text-gray-800 truncate max-w-[120px]">{perfil.username}</span></Link>) : (<Link href="/login" className="text-[#1877F2] font-semibold text-sm flex items-center gap-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>Iniciar Sesion</Link>)}
             <div className="flex items-center gap-2">
               {usuario ? (<button onClick={cerrarSesion} className="text-xs text-gray-400 hover:text-red-500 cursor-pointer">Salir</button>) : null}
               <button onClick={() => setMostrarPopup(true)} className="bg-[#1877F2] text-white px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer hover:bg-[#166FE5]">Crear</button>
@@ -264,9 +265,8 @@ export default function PaginaGrupo() {
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
                 <span onClick={() => toggleLikePost(post.id)} className={`px-3 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors text-xs sm:text-sm ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
                 <span onClick={() => toggleComentarios(post.id)} className={`px-3 py-1 rounded cursor-pointer text-xs sm:text-sm ${postsAbiertos.includes(post.id) ? "font-bold text-gray-900 bg-gray-100" : "hover:bg-gray-100"}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
-                {(post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-3 py-1 rounded cursor-pointer text-xs sm:text-sm">Delete</span>) : null}
+                {(post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-3 py-1 rounded cursor-pointer text-xs sm:text-sm">Delete</span>) : null)}
               </div>
-              {/* SECCIÓN DE COMENTARIOS SEPARADA PARA QUE NO SE ROMPA AL COPIAR */}
               {postsAbiertos.includes(post.id) && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <div className="flex gap-2 mb-4">
@@ -303,20 +303,19 @@ export default function PaginaGrupo() {
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
       </div>
 
-      {/* SIDEBAR DERECHO: RECOMENDADOS */}
       <aside className="w-[280px] shrink-0 hidden lg:block">
-        <div className="fixed w-[280px">
+        <div className="fixed w-[280px]">
           <div className="p-2"><h2 className="font-semibold text-gray-500 text-[13px] px-2 py-1 uppercase">Grupos Recomendados</h2></div>
           <ul>
             {gruposRecomendados.length === 0 && <li className="px-2 py-1 text-sm text-gray-400 italic px-4">No hay grupos aún.</li>}
             {gruposRecomendados.map((grupo) => (
               <li key={grupo.nombre}>
                 <Link href={`/grupo/${grupo.nombre}`} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="w-12 h-12 bg-gray-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-gray-500">{grupo.thumbnail_url ? <img src={grupo.thumbnail_url} className="w-full h-full object-cover" alt=""/> : <span className="text-xl font-bold">{grupo.nombre.charAt(0).toUpperCase()}</span></div>
+                  <div className="w-12 h-12 bg-gray-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-gray-500">{grupo.thumbnail_url ? <img src={grupo.thumbnail_url} className="w-full h-full object-cover" alt=""/> : <span className="text-xl font-bold">{grupo.nombre.charAt(0).toUpperCase()}</span>}</div>
                   <div className="flex-1 min-w-0 pt-1">
                     <span className="text-[15px] text-gray-800 font-medium truncate block">{grupo.nombre}</span>
                     <span className="text-xs text-gray-500 block truncate mt-0.5">{grupo.descripcion || "Sin descripción"}</span>
@@ -341,7 +340,7 @@ export default function PaginaGrupo() {
               {cargandoGifs ? (<div className="flex items-center justify-center h-full text-gray-500 font-medium">Cargando GIFs...</div>) : resultadosGifs.length === 0 ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><p className="text-lg font-bold mb-2">Sin resultados</p><p className="text-sm">Prueba buscando "feliz" o "gato"</p></div>) : (
                 <div className="grid grid-cols-3 gap-2">
                   {resultadosGifs.map((gif) => (
-                    <div key={gif.id} onClick={() => seleccionarGif(gif.url)} className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-80 hover:scale-105 transition-transform border border border-gray-200 bg-white">
+                    <div key={gif.id} onClick={() => seleccionarGif(gif.url)} className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-80 hover:scale-105 transition-transform border border-gray-200 bg-white">
                       <img src={gif.preview} alt="GIF" className="w-full h-full object-cover" loading="lazy"/>
                     </div>
                   ))}
