@@ -58,7 +58,7 @@ export default function PaginaGrupo() {
       return; 
     }
     const { data } = await supabase.from("miembros").select("id").eq("user_id", session.user.id).eq("grupo_nombre", idGrupo);
-    setEsMiembro(!!(data && data.length > 0)); // <-- AQUÍ ESTÁ EL FIX DE TYPESCRIPT
+    setEsMiembro(!!(data && data.length > 0)); 
   };
 
   const traerPosts = async () => {
@@ -189,7 +189,7 @@ export default function PaginaGrupo() {
   const votarComentario = async (postId: string, comentarioId: string, tipo: 1 | -1) => {
     if (!usuario) return;
     const votoActual = userVotes.get(comentarioId) || 0;
-    let cambioEnScore = tipo;
+    let cambioEnScore: number = tipo; // <-- AQUÍ ESTÁ EL FIX DE TYPESCRIPT
     if (votoActual === tipo) {
       await supabase.from("votos_comentarios").delete().eq("comentario_id", comentarioId).eq("user_id", usuario.id);
       cambioEnScore = -tipo;
