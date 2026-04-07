@@ -51,9 +51,12 @@ export default function PaginaGrupo() {
 
   useEffect(() => { traerPosts(); comprobarMembresia(); }, [idGrupo]);
 
-   const comprobarMembresia = async () => {
+  const comprobarMembresia = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) { setEsMibero(false); return; } // <-- LÍNEA 58 ARREGLADA
+    if (!session?.user) { 
+      setEsMiembro(false); // <-- LÍNEA 58 REALMENTE ARREGLADA (antes decía setEsMibero)
+      return; 
+    }
     const { data } = await supabase.from("miembros").select("id").eq("user_id", session.user.id).eq("grupo_nombre", idGrupo);
     setEsMiembro(data && data.length > 0);
   };
@@ -82,9 +85,11 @@ export default function PaginaGrupo() {
 
   const seleccionarImagenPost = (e: any) => {
     const archivo = e.target.files[0]; if (!archivo) return;
-    setImagenPreview(URL.createObjectURL(archivo)); setArchivoASubir(archivo);
+    setImagenPreview(URL.createObjectURL(archivo)); 
+    setArchivoASubir(archivo);
     setMostrarBuscadorGif(false); 
   };
+
   const limpiarMultimedia = () => { setImagenPreview(""); setArchivoASubir(null); };
 
   const handleBuscarGifs = async (query: string) => {
@@ -108,6 +113,7 @@ export default function PaginaGrupo() {
 
   const seleccionarGif = (url: string) => {
     setImagenPreview(url);
+    setArchivoASubir(null); // <-- SOLUCIÓN: Limpiar archivo local por si el usuario cambió de opinión
     setMostrarBuscadorGif(false);
     setBusquedaGif("");
   };
@@ -235,7 +241,7 @@ export default function PaginaGrupo() {
             </div>
             
             {imagenPreview ? (
-              imagenPreview.endsWith('.gif') ? (
+              imagenPreview.includes('.gif') ? (
                 <div className="mt-3 relative">
                   <img src={imagenPreview} className="w-full max-h-80 object-contain rounded-lg bg-black/5" alt="GIF Preview" />
                   <button onClick={limpiarMultimedia} className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 cursor-pointer"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
@@ -262,7 +268,7 @@ export default function PaginaGrupo() {
                 </div>
                 <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? <>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
                 
-                {post.imagen_url ? (post.imagen_url.endsWith('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
+                {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
 
                 <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
                   <span onClick={() => toggleLikePost(post.id)} className={`px-4 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
