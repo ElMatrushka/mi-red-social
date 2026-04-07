@@ -6,7 +6,7 @@ import Link from "next/link";
 
 export default function Home() {
   const [mostrarPopup, setMostrarPopup] = useState(false);
-  const [creandoGrupo, setCreandoGrupo] = useState(false); // NUEVO ESTADO PARA EVITAR DOBLE CLICK
+  const [creandoGrupo, setCreandoGrupo] = useState(false);
   const [nombreGrupo, setNombreGrupo] = useState("");
   const [descripcionGrupo, setDescripcionGrupo] = useState("");
   const [archivoMiniatura, setArchivoMiniatura] = useState<any>(null);
@@ -74,28 +74,18 @@ export default function Home() {
 
   const crearGrupo = async () => {
     if (nombreGrupo.trim() === "" || creandoGrupo) return;
-    setCreandoGrupo(true); // BLOQUEAR BOTÓN
+    setCreandoGrupo(true);
     let thumbnailUrl = null;
-    
     if (archivoMiniatura) {
       const ext = archivoMiniatura.name.split('.').pop();
       const path = `grupo-thumbnails/${nombreGrupo.replace(/\s/g, '_')}_${Date.now()}.${ext}`;
       const { error: errorSubida } = await supabase.storage.from("grupo-thumbnails").upload(path, archivoMiniatura);
-      if (!errorSubida) {
-        const { data: urlData } = supabase.storage.from("grupo-thumbnails").getPublicUrl(path);
-        thumbnailUrl = urlData.publicUrl;
-      }
+      if (!errorSubida) { const { data: urlData } = supabase.storage.from("grupo-thumbnails").getPublicUrl(path); thumbnailUrl = urlData.publicUrl; }
     }
-
     await supabase.from("grupos").insert([{ nombre: nombreGrupo, descripcion: descripcionGrupo, thumbnail_url: thumbnailUrl }]);
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) await supabase.from("miembros").insert([{ user_id: session.user.id, grupo_nombre: nombreGrupo }]);
-    
-    setCreandoGrupo(false); // DESBLOQUEAR BOTÓN
-    limpiarPopup(); 
-    setMostrarPopup(false); // CERRAR VENTANA
-    traerMisGrupos(); 
-    traerFeed();
+    setCreandoGrupo(false); limpiarPopup(); setMostrarPopup(false); traerMisGrupos(); traerFeed();
   };
 
   const cerrarSesion = async () => { await supabase.auth.signOut(); };
@@ -213,7 +203,42 @@ export default function Home() {
                 <span onClick={() => toggleComentarios(post.id)} className={`px-3 py-1 rounded cursor-pointer text-xs sm:text-sm ${postsAbiertos.includes(post.id) ? "font-bold text-gray-900 bg-gray-100" : "hover:bg-gray-100"}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
                 {post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-3 py-1 rounded cursor-pointer text-xs sm:text-sm">Delete</span>) : null}
               </div>
-              {postsAbiertos.includes(post.id) && (<div className="mt-3 pt-3 border-t border-gray-100"><div className="flex gap-2 mb-4"><img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff" className="w-8 h-8 rounded-full shrink-0" alt="avatar"/><input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e) => setTextosComentarios(prev => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && publicarComentario(post.id)} /></div>{Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 && (<div className="flex flex-col gap-3">{listaComentarios[post.id].map((c: any) => (<div key={c.id} className="flex gap-2 items-start"><img src={c.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-8 h-8 rounded-full shrink-0 mt-0.5" alt="avatar"/><div className="flex-1 min-w-0"><div className="flex items-center justify-between mb-0.5"><p className="font-semibold text-[13px] text-gray-800 truncate mr-2">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p><div className="flex items-center gap-1 shrink-0"><button onClick={() => votarComentario(post.id, c.id, 1)} className={`hover:text-orange-500 transition-colors ${c.userVote === 1 ? 'text-orange-500' : 'text-gray-400'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button><span className={`text-[11px] font-bold ${c.userVote === 1 ? 'text-orange-500' : c.userVote === -1 ? 'text-blue-500' : 'text-gray-500'}`}>{c.score || 0}</span><button onClick={() => votarComentario(post.id, c.id, -1)} className={`hover:text-blue-500 transition-colors ${c.userVote === -1 ? 'text-blue-500' : 'text-gray-400'}`}><svg className="w-4 h-4 rotate-180" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button></div></div><p className="text-[15px] text-gray-700 break-words">{(c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)) ? <>{c.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button></> : c.mensaje}{(c.mensaje?.length > 200 && comentariosExpandidos.has(c.id)) && <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline ml-1">Ver menos</button>}</p></div></div>))}</div>)}</div>)}
+              
+              {postsAbiertos.includes(post.id) && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex gap-2 mb-4">
+                    <img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff"} className="w-8 h-8 rounded-full shrink-0" alt="avatar"/>
+                    <input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e) => setTextosComentarios(prev => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && publicarComentario(post.id)} />
+                  </div>
+                  {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      {listaComentarios[post.id].map((c: any) => (
+                        <div key={c.id} className="flex gap-2 items-start">
+                          <img src={c.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-8 h-8 rounded-full shrink-0 mt-0.5" alt="avatar"/>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <p className="font-semibold text-[13px] text-gray-800 truncate mr-2">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={() => votarComentario(post.id, c.id, 1)} className={`hover:text-orange-500 transition-colors ${c.userVote === 1 ? 'text-orange-500' : 'text-gray-400'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button>
+                                <span className={`text-[11px] font-bold ${c.userVote === 1 ? 'text-orange-500' : c.userVote === -1 ? 'text-blue-500' : 'text-gray-500'}`}>{c.score || 0}</span>
+                                <button onClick={() => votarComentario(post.id, c.id, -1)} className={`hover:text-blue-500 transition-colors ${c.userVote === -1 ? 'text-blue-500' : 'text-gray-400'}`}><svg className="w-4 h-4 rotate-180" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button>
+                              </div>
+                            </div>
+                            <p className="text-[15px] text-gray-700 break-words">
+                              {(c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)) ? (
+                                <>{c.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button></>
+                              ) : c.mensaje}
+                              {(c.mensaje?.length > 200 && comentariosExpandidos.has(c.id)) && (
+                                <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline ml-1">Ver menos</button>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )))}
         </div>
@@ -231,7 +256,7 @@ export default function Home() {
                     {previewMiniatura ? <img src={previewMiniatura} className="w-full h-full object-cover" alt="Preview"/> : <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
                   </div>
                 </div>
-                <div className="flex-1 text-sm text-gray-500">Sube una imagen de miniatura para tu grupo (Opcional).</div>
+                <div className="flex-1 text-sm text-gray-500">Sube una imagen de miniatura (Opcional).</div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del grupo</label>
@@ -243,7 +268,6 @@ export default function Home() {
               </div>
               <div className="flex justify-end gap-2 border-t border-gray-200 pt-3">
                 <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-md font-medium cursor-pointer" onClick={() => { limpiarPopup(); setMostrarPopup(false); }}>Cancelar</button>
-                {/* BOTÓN MEJORADO PARA EVITAR DOBLE CLICK */}
                 <button className="bg-[#1877F2] hover:bg-[#166FE5] text-white py-2 px-4 rounded-md font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" onClick={crearGrupo} disabled={creandoGrupo}>
                   {creandoGrupo ? "Creando..." : "Crear Grupo"}
                 </button>
