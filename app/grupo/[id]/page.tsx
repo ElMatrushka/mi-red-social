@@ -33,7 +33,7 @@ export default function PaginaGrupo() {
   const [postsExpandidos, setPostsExpandidos] = useState<Set<string>>(new Set());
   const [comentariosExpandidos, setComentariosExpandidos] = useState<Set<string>>(new Set());
 
-  // NUEVO ESTADO: SISTEMA DE ROLES
+  // SISTEMA DE ROLES
   const [miRol, setMiRol] = useState<string>("miembro"); 
 
   useEffect(() => {
@@ -52,7 +52,6 @@ export default function PaginaGrupo() {
 
   useEffect(() => { traerPosts(); comprobarMembresia(); }, [idGrupo]);
 
-  // NUEVO: TRAER EL ROL ASIGNADO
   const comprobarMembresia = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) { 
@@ -123,7 +122,7 @@ export default function PaginaGrupo() {
   };
 
   const publicarPost = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } = await supabase.auth.getSession();
     if ((!nuevoPost.trim() && !archivoASubir && !imagenPreview) || !session?.user || !esMiembro || !perfil) return;
     let urlImagen = imagenPreview; 
     if (archivoASubir) {
@@ -162,51 +161,27 @@ export default function PaginaGrupo() {
       comentariosConScore.sort((a, b) => b.score - a.score);
       const newState = { ...listaComentarios }; newState[postId] = comentariosConScore; setListaComentarios(newState);
     } else {
-      const comentariosConScore = data.map((c: any) => ({ ...c, autor_perfil: mapaPerfiles.get(c.user_id) || null, score: 0, userVote: 0 }));
-      const newState = { ...listaComentarios }; newState[postId] = comentariosConScore; setListaComentarios(newState);
+      const newState = { ...listaComentarios }; newState[postId] = data.map((c: any) => ({ ...c, autor_perfil: mapaPerfiles.get(c.user_id) || null, score: 0, userVote: 0 })); setListaComentarios(newState);
     }
   };
 
-  const publicarComentario = async (postId: string) => {
+  const toggleComentarios = async (postId: string) => {
     const textoActual = textosComentarios[postId] || "";
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } = await supabase.auth.getSession();
     if (textoActual.trim() === "" || !session?.user || !perfil) return;
-    const { error } = await supabase.from("comentarios").insert([{ post_id: postId, user_id: session.user.id, autor_username: perfil.username, mensaje: textoActual }]);
-    if (error) { alert("ERROR: " + error.message); return; }
+    await supabase.from("comentarios").insert([{ post_id: postId, user_id: session.user.id, autor_username: perfil.username, mensaje: textoActual }]);
     const textosLimpios = { ...textosComentarios }; textosLimpios[postId] = ""; setTextosComentarios(textosLimpios);
-    traerComentarios(postId);
-  };
-
-  const toggleLikePost = async (postId: string) => {
-    if (!usuario) return;
-    if (likedPosts.has(postId)) {
-      await supabase.from("likes_posts").delete().eq("post_id", postId).eq("user_id", usuario.id);
-      setLikedPosts((prev) => { const n = new Set(prev); n.delete(postId); return n; });
-      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: p.likes - 1 } : p));
-    } else {
-      await supabase.from("likes_posts").insert([{ post_id: postId, user_id: usuario.id }]);
-      setLikedPosts((prev) => new Set(prev).add(postId));
-      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likes: p.likes + 1 } : p));
-    }
+    await traerComentarios(postId);
   };
 
   const votarComentario = async (postId: string, comentarioId: string, tipo: 1 | -1) => {
     if (!usuario) return;
     const votoActual = userVotes.get(comentarioId) || 0;
     let cambioEnScore: number = tipo; 
-    if (votoActual === tipo) {
-      await supabase.from("votos_comentarios").delete().eq("comentario_id", comentarioId).eq("user_id", usuario.id);
-      cambioEnScore = -tipo;
-    } else {
-      await supabase.from("votos_comentarios").upsert({ comentario_id: comentarioId, user_id: usuario.id, tipo_voto: tipo }, { onConflict: 'user_id,comentario_id' });
-      if (votoActual !== 0) cambioEnScore = tipo * 2; 
-    }
+    if (votoActual === tipo) { await supabase.from("votos_comentarios").delete().eq("comentario_id", comentarioId).eq("user_id", usuario.id); cambioEnScore = -tipo; }
+    else { await supabase.from("votos_comentarios").upsert({ comentario_id: comentarioId, user_id: usuario.id, tipo_voto: tipo }, { onConflict: 'user_id,comentario_id' }); if (votoActual !== 0) cambioEnScore = tipo * 2; }
     setUserVotes((prev) => new Map(prev).set(comentarioId, votoActual === tipo ? 0 : tipo));
-    setListaComentarios((prevState) => {
-      const newComments = { ...prevState };
-      newComments[postId] = newComments[postId].map((c: any) => c.id === comentarioId ? { ...c, score: c.score + cambioEnScore, userVote: votoActual === tipo ? 0 : tipo } : c).sort((a: any, b: any) => b.score - a.score);
-      return newComments;
-    });
+    setListaComentarios((prevState) => { const newComments = { ...prevState }; newComments[postId] = newComments[postId].map((c: any) => c.id === comentarioId ? { ...c, score: c.score + cambioEnScore, userVote: votoActual === tipo ? 0 : tipo } : c).sort((a: any, b: any) => b.score - a.score); return newComments; });
   };
 
   const unirseGrupo = async () => { 
@@ -227,7 +202,7 @@ export default function PaginaGrupo() {
     router.push("/"); 
   };
   
-  const eliminarPost = async (postId: string) => { if (!window.confirm("Are you sure you want to delete this post?")) return; await supabase.from("posts").delete().eq("id", postId); traerPosts(); };
+  const eliminarPost = async (postId: string) => { if (!window.confirm("Are you sure?")) return; await supabase.from("posts").delete().eq("id", postId); traerPosts(); };
   
   const toggleTextoExpandido = (setter: any, id: string) => { setter((prev: Set<string>) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }); };
 
@@ -235,22 +210,24 @@ export default function PaginaGrupo() {
     <main className="max-w-6xl mx-auto pt-6 px-4 flex gap-6">
       <aside className="w-[280px] shrink-0 hidden lg:block">
         <div className="fixed w-[280px]">
-          <Link href="/" className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors mb-2"><svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg><span className="font-semibold text-[15px] text-gray-800">Volver al inicio</span></Link>
+          {perfil ? (
+            <div className="flex flex-col items-center p-4">
+              <Link href="/configurar-perfil" className="group relative block"><img src={perfil.avatar_url} className="w-16 h-16 rounded-full border-2 border-white shadow-md group-hover:opacity-80 transition-opacity" alt="avatar"/></Link>
+              <Link href="/configurar-perfil" className="font-semibold text-[15px] text-gray-800 truncate mt-2 hover:underline">{perfil.username}</Link>
+            </div>
+          ) : (<Link href="/login" className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors mb-1"><div className="w-9 h-9 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm">?</div><span className="font-medium text-[15px] text-[#1877F2]">Iniciar Sesion</span></Link>)}
           <hr className="my-2 border-gray-300" />
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-100"><div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-lg">G</div><span className="text-[15px] text-gray-800 font-medium">{idGrupo}</span></div>
           
-          <hr className="my-2 border-gray-300" />
-          
-          {/* NUEVO: PLACAS DE ROL */}
+          {/* PLACAS DE ROL */}
           {miRol === 'admin' && (
             <div className="mx-2 p-2 bg-red-100 text-red-700 rounded-lg flex items-center gap-2 text-sm font-bold">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-2-8a6 6 0 11-12 0 6 6 0 0112 0zm-2-4a4 4 0 10-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 011-16 0zm-2-8a6 6 0 11-12 0 6 6 0 0112 0zm-2-4a4 4 0 10-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
               Administrador
             </div>
           )}
           {miRol === 'moderador' && (
             <div className="mx-2 p-2 bg-blue-100 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-bold">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 011-6 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10V9a3 3 0 00-3-3H8a3 3 0 00-3 3v1m14-4V8a3 3 0 00-3-3H8m4 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 011-6 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10V9a3 3 0 00-3-3H8a3 3 0 00-3-3H5a3 3 0 00-3-3v1m14-4V8a3 3 0 00-3-3H8m4 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" /></svg>
               Moderador
             </div>
           )}
@@ -258,67 +235,99 @@ export default function PaginaGrupo() {
           <ul>
             <li className="font-semibold text-gray-500 text-[13px] px-2 py-1 uppercase">Tus Grupos</li>
             {misGrupos.map((grupo) => (
-              <li key={grupo.nombre}><Link href={`/grupo/${grupo}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"><div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-lg">G</div><span className="text-[15px] text-gray-800 font-medium truncate">{grupo.nombre}</span></Link></li>
+              <li key={grupo.nombre}><Link href={`/grupo/${grupo.nombre}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"><div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-lg">G</div><span className="text-[15px] text-gray-800 font-medium truncate">{grupo.nombre}</span></Link></li>
             ))}
             <li><button onClick={() => setMostrarPopup(true)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors w-full text-left"><div className="w-9 h-9 bg-gray-100 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center text-gray-500 text-xl">+</div><span className="text-[15px] text-[#1877F2] font-medium">Crear nuevo grupo</span></button></li>
           </ul>
+          {usuario ? (<button onClick={cerrarSesion} className="mt-4 text-sm text-gray-400 hover:text-red-500 cursor-pointer">Cerrar sesion</button>) : null}
         </div>
       </aside>
 
-      <div className="flex-1 max-w-[600px]">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4 flex justify-between items-center">
-          <div><h1 className="text-2xl font-bold text-gray-900">{idGrupo}</h1><p className="text-sm text-gray-500">Grupo privado</p></div>
-          {usuario ? (esMiembro ? (<button onClick={salirseGrupo} className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-md text-sm font-medium cursor-pointer">Leave Group</button>) : (<button onClick={unirseGrupo} className="bg-[#1877F2] hover:bg-[#166FE5] text-white py-2 px-4 rounded-md text-sm font-medium cursor-pointer">Join Group</button>)) : null}
+      <div className="flex-1 max-w-[600px] min-w-0">
+        <div className="flex lg:hidden flex-col gap-3 mb-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex justify-between items-center">
+            {perfil ? (<Link href="/configurar-perfil" className="flex items-center gap-2"><img src={perfil.avatar_url} className="w-9 h-9 rounded-full border border-gray-200" alt="avatar"/><span className="font-semibold text-sm text-gray-800 truncate max-w-[120px]">{perfil.username}</span></Link>) : (<Link href="/login" className="text-[#1877F2] font-semibold text-sm flex items-center gap-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3-3h7a3 3 0 013 3 3v1" /></svg>Iniciar Sesion</Link>)}
+            <div className="flex items-center gap-2">
+              {usuario ? (<button onClick={cerrarSesion} className="text-xs text-gray-400 hover:text-red-500 cursor-pointer">Salir</button>) : null}
+              <button onClick={() => setMostrarPopup(true)} className="bg-[#1877F2] text-white px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer hover:bg-[#166FE5]">Crear</button>
+            </div>
+          </div>
+          {misGrupos.length > 0 && (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex gap-2 overflow-x-auto">{misGrupos.map((grupo) => (<Link key={grupo.nombre} href={`/grupo/${grupo.nombre}`} className="flex-shrink-0 px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-800 hover:bg-gray-200 transition-colors truncate max-w-[150px]">{grupo.nombre}</Link>))}</div>)}
         </div>
 
-        {esMiembro ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
-            <div className="flex gap-3">
-              <img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/>
-              <input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder={`Escribe algo en ${idGrupo}...`} value={nuevoPost} onChange={(e) => setNuevoPost(e.target.value)} onKeyDown={(e) => e.key === "Enter" && publicarPost()} />
-              <div className="flex gap-2">
-                <div className="relative">
-                  <input type="file" accept="image/png, image/jpeg" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={seleccionarImagenPost} />
-                  <div className="bg-gray-100 hover:bg-gray-200 text-green-600 h-10 w-10 rounded-full flex items-center justify-center cursor-pointer"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div>
-                </div>
-                <button onClick={() => { setMostrarBuscadorGif(true); handleTraerTrending(); }} className="bg-gray-100 hover:bg-gray-200 text-purple-600 h-10 w-10 rounded-full flex items-center justify-center cursor-pointer font-bold text-sm">GIF</button>
-              </div>
-            </div>
-            
-            {imagenPreview ? (imagenPreview.includes('.gif') ? (<div className="mt-3 relative"><img src={imagenPreview} className="w-full max-h-80 object-contain rounded-lg bg-black/5" alt="GIF Preview" /><button onClick={limpiarMultimedia} className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 cursor-pointer"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>) : (<div className="mt-3 relative"><img src={imagenPreview} className="w-full max-h-80 object-cover rounded-lg" alt="Preview" /><button onClick={limpiarMultimedia} className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 cursor-pointer"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div>)) : null}
-
-            {(nuevoPost.trim() !== "" || imagenPreview) ? (<div className="mt-3 flex justify-between items-center border-t border-gray-200 pt-3"><span className="text-xs text-gray-400">{nuevoPost.length}/1000</span><button className="bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold py-2 px-6 rounded-md text-sm cursor-pointer" onClick={publicarPost}>Publicar</button></div>) : null}
-          </div>
-        ) : (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4 text-center text-gray-500">Debes unirte al grupo para poder publicar.</div>)}
-
         <div className="flex flex-col gap-4">
-          {posts.length === 0 ? (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500"><p className="text-lg font-medium mb-2">No hay publicaciones todavia</p><p className="text-sm">Se el primero en compartir algo en este grupo.</p></div>) : (
-            posts.map((post) => (
-              <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="flex items-center gap-3 mb-3"><img src={post.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=Anonimo&background=gray&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/><div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1">{new Date(post.creado_en).toLocaleDateString()} - {new Date(post.creado_en).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}</span></p></div></div>
-                <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? <>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
-                
-                {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
-
-                <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
-                  <span onClick={() => toggleLikePost(post.id)} className={`px-4 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
-                  <span onClick={() => toggleComentarios(post.id)} className={`px-4 py-1 rounded cursor-pointer ${postsAbiertos.includes(post.id) ? "font-bold text-gray-900 bg-gray-100" : "hover:bg-gray-100"}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
-                  {/* NUEVO: PERMISOS PARA ELIMINAR */}
-                  {(post.user_id === usuario?.id || miRol === 'admin' || miRol === 'moderador') ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-4 py-1 rounded cursor-pointer">Eliminar</span>) : null}
-                </div>
-                
-                {postsAbiertos.includes(post.id) ? (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex gap-2 mb-4"><img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff"} className="w-8 h-8 rounded-full shrink-0" alt="avatar"/><input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e) => setTextosComentarios((prev) => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && publicarComentario(post.id)} /></div>
-                    {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? (
-                      <div className="flex flex-col gap-3">{listaComentarios[post.id].map((c: any) => (<div key={c.id} className="flex gap-2 items-start"><img src={c.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-8 h-8 rounded-full shrink-0 mt-0.5" alt="avatar"/><div className="flex-1 min-w-0"><div className="flex items-center justify-between mb-0.5"><p className="font-semibold text-[13px] text-gray-800 truncate mr-2">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p><div className="flex items-center gap-1 shrink-0"><button onClick={() => votarComentario(post.id, c.id, 1)} className={`hover:text-orange-500 transition-colors ${c.userVote === 1 ? 'text-orange-500' : 'text-gray-400'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button><span className={`text-[11px] font-bold ${c.userVote === 1 ? 'text-orange-500' : c.userVote === -1 ? 'text-blue-500' : 'text-gray-500'}`}>{c.score || 0}</span><button onClick={() => votarComentario(post.id, c.id, -1)} className={`hover:text-blue-500 transition-colors ${c.userVote === -1 ? 'text-blue-500' : 'text-gray-400'}`}><svg className="w-4 h-4 rotate-180" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button></div></div><p className="text-[15px] text-gray-700 break-words">{(c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)) ? (<>{c.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button></>) : c.mensaje}{(c.mensaje?.length > 200 && comentariosExpandidos.has(c.id)) && (<button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline ml-1">Ver menos</button>)}</p></div></div>))}</div>)}
-                  </div>
-                ) : null}
+          {feedPosts.length === 0 ? (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500"><p className="text-lg font-medium mb-2">Tu inicio está vacío</p><p className="text-sm">Usa la barra de búsqueda de arriba para encontrar comunidades.</p></div>) : (feedPosts.map((post) => (
+            <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <div className="flex items-center gap-3 mb-3"><img src={post.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=Anonimo&background=gray&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/><div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1">{new Date(post.creado_en).toLocaleDateString()} - {new Date(post.creado_en).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}</span></p></div></div>
+              <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? (<>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></>) : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
+              {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
+              <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
+                <span onClick={() => toggleLikePost(post.id)} className={`px-3 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors text-xs sm:text-sm ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
+                <span onClick={() => toggleComentarios(post.id)} className={`px-3 py-1 rounded cursor-pointer text-xs sm:text-sm ${postsAbiertos.includes(post.id) ? "font-bold text-gray-900 bg-gray-100" : "hover:bg-gray-100"}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
+                {(post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-3 py-1 rounded cursor-pointer text-xs sm:text-sm">Delete</span>) : null}
               </div>
-            ))
+              {/* SECCIÓN DE COMENTARIOS SEPARADA PARA QUE NO SE ROMPA AL COPIAR */}
+              {postsAbiertos.includes(post.id) && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex gap-2 mb-4">
+                    <img src={perfil?.avatar_url || "https://ui-avatars.com/api/?name=U&background=1877F2&color=fff"} className="w-8 h-8 rounded-full shrink-0" alt="avatar"/>
+                    <input type="text" maxLength={1000} className="flex-1 bg-gray-100 rounded-full px-4 py-1.5 outline-none text-sm text-gray-700 placeholder-gray-500" placeholder="Escribe un comentario..." value={textosComentarios[post.id] || ""} onChange={(e) => setTextosComentarios(prev => ({ ...prev, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && publicarComentario(post.id)} />
+                  </div>
+                  {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      {listaComentarios[post.id].map((c: any) => (
+                        <div key={c.id} className="flex gap-2 items-start">
+                          <img src={c.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=A&background=gray&color=fff"} className="w-8 h-8 rounded-full shrink-0 mt-0.5" alt="avatar"/>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <p className="font-semibold text-[13px] text-gray-800 truncate mr-2">{c.autor_perfil?.username || c.autor_username || "Anonimo"} <span className="font-normal text-[11px] text-gray-500">{new Date(c.creado_en).toLocaleDateString()}</span></p>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={() => votarComentario(post.id, c.id, 1)} className={`hover:text-orange-500 transition-colors ${c.userVote === 1 ? 'text-orange-500' : 'text-gray-400'}`}><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button>
+                                <span className={`text-[11px] font-bold ${c.userVote === 1 ? 'text-orange-500' : c.userVote === -1 ? 'text-blue-500' : 'text-gray-500'}`}>{c.score || 0}</span>
+                                <button onClick={() => votarComentario(post.id, c.id, -1)} className={`hover:text-blue-500 transition-colors ${c.userVote === -1 ? 'text-blue-500' : 'text-gray-400'}`}><svg className="w-4 h-4 rotate-180" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" /></svg></button>
+                              </div>
+                            </div>
+                            <p className="text-[15px] text-gray-700 break-words">
+                              {(c.mensaje?.length > 200 && !comentariosExpandidos.has(c.id)) ? (
+                                <>{c.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline">Ver más</button>
+                              ) : c.mensaje}
+                              {(c.mensaje?.length > 200 && comentariosExpandidos.has(c.id)) && (
+                                <button onClick={() => toggleTextoExpandido(setComentariosExpandidos, c.id)} className="text-[#1877F2] text-sm font-medium hover:underline ml-1">Ver menos</button>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
+
+      {/* SIDEBAR DERECHO: RECOMENDADOS */}
+      <aside className="w-[280px] shrink-0 hidden lg:block">
+        <div className="fixed w-[280px">
+          <div className="p-2"><h2 className="font-semibold text-gray-500 text-[13px] px-2 py-1 uppercase">Grupos Recomendados</h2></div>
+          <ul>
+            {gruposRecomendados.length === 0 && <li className="px-2 py-1 text-sm text-gray-400 italic px-4">No hay grupos aún.</li>}
+            {gruposRecomendados.map((grupo) => (
+              <li key={grupo.nombre}>
+                <Link href={`/grupo/${grupo.nombre}`} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div className="w-12 h-12 bg-gray-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-gray-500">{grupo.thumbnail_url ? <img src={grupo.thumbnail_url} className="w-full h-full object-cover" alt=""/> : <span className="text-xl font-bold">{grupo.nombre.charAt(0).toUpperCase()}</span></div>
+                  <div className="flex-1 min-w-0 pt-1">
+                    <span className="text-[15px] text-gray-800 font-medium truncate block">{grupo.nombre}</span>
+                    <span className="text-xs text-gray-500 block truncate mt-0.5">{grupo.descripcion || "Sin descripción"}</span>
+                    <span className="text-xs text-gray-400 block mt-1">{grupo.miembros} miembros</span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </aside>
 
       {mostrarBuscadorGif ? (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -329,7 +338,15 @@ export default function PaginaGrupo() {
               <button onClick={() => handleBuscarGifs(busquedaGif)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 rounded-full font-medium text-sm cursor-pointer">Buscar</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {cargandoGifs ? (<div className="flex items-center justify-center h-full text-gray-500 font-medium">Cargando GIFs...</div>) : resultadosGifs.length === 0 ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><p className="text-lg font-bold mb-2">Sin resultados</p><p className="text-sm">Prueba buscando "feliz" o "gato"</p></div>) : (<div className="grid grid-cols-3 gap-2">{resultadosGifs.map((gif: any) => (<div key={gif.id} onClick={() => seleccionarGif(gif.url)} className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-80 hover:scale-105 transition-transform border border-gray-200 bg-white"><img src={gif.preview} alt="GIF" className="w-full h-full object-cover" loading="lazy"/></div>))}</div>)}
+              {cargandoGifs ? (<div className="flex items-center justify-center h-full text-gray-500 font-medium">Cargando GIFs...</div>) : resultadosGifs.length === 0 ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><p className="text-lg font-bold mb-2">Sin resultados</p><p className="text-sm">Prueba buscando "feliz" o "gato"</p></div>) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {resultadosGifs.map((gif) => (
+                    <div key={gif.id} onClick={() => seleccionarGif(gif.url)} className="aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-80 hover:scale-105 transition-transform border border border-gray-200 bg-white">
+                      <img src={gif.preview} alt="GIF" className="w-full h-full object-cover" loading="lazy"/>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
