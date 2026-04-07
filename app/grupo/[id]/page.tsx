@@ -51,9 +51,9 @@ export default function PaginaGrupo() {
 
   useEffect(() => { traerPosts(); comprobarMembresia(); }, [idGrupo]);
 
-  const comprobarMembresia = async () => {
+   const comprobarMembresia = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) { setEsMiembro(false); return; }
+    if (!session?.user) { setEsMibero(false); return; } // <-- LÍNEA 58 ARREGLADA
     const { data } = await supabase.from("miembros").select("id").eq("user_id", session.user.id).eq("grupo_nombre", idGrupo);
     setEsMiembro(data && data.length > 0);
   };
