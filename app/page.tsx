@@ -7,34 +7,57 @@ import Link from "next/link";
 export default function Home() {
   const [mostrarPopup, setMostrarPopup] = useState(false);
   const [nombreGrupo, setNombreGrupo] = useState("");
-  const [grupos, setGrupos] = useState<string[]>([]);
+  const [descripcionGrupo, setDescripcionGrupo] = useState(""); // Nuevo estado
+  
+  // Ahora guardaremos objetos completos de grupos, no solo strings
+  const [misGrupos, setMisGrupos] = useState<any[]>([]); 
+  
   const [usuario, setUsuario] = useState<any>(null);
   const [perfil, setPerfil] = useState<any>(null);
   const [feedPosts, setFeedPosts] = useState<any[]>([]);
   
+  // Estados para la búsqueda
+  const [busquedaGlobal, setBusquedaGlobal] = useState("");
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<any[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  
   const [postsAbiertos, setPostsAbiertos] = useState<string[]>([]);
   const [textosComentarios, setTextosComentarios] = useState<any>({});
   const [listaComentarios, setListaComentarios] = useState<any>({});
-  
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [userVotes, setUserVotes] = useState<Map<string, number>>(new Map());
-  
   const [postsExpandidos, setPostsExpandidos] = useState<Set<string>>(new Set());
   const [comentariosExpandidos, setComentariosExpandidos] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    traerGrupos(); traerFeed();
+    traerMisGrupos(); traerFeed();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUsuario(session?.user ?? null);
-      if (session?.user) traerPerfil(session.user.id); else setPerfil(null);
+      if (session?.user) { traerPerfil(session.user.id); traerMisGrupos(); } else { setPerfil(null); setMisGrupos([]); }
       traerFeed(); 
     });
-    supabase.auth.getSession().then(({ data: { session } }) => { if (session?.user) traerPerfil(session.user.id); });
+    supabase.auth.getSession().then(({ data: { session } }) => { 
+      if (session?.user) { traerPerfil(session.user.id); traerMisGrupos(); } 
+    });
     return () => subscription.unsubscribe();
   }, []);
 
   const traerPerfil = async (userId: string) => { const { data } = await supabase.from("perfiles").select("*").eq("id", userId).maybeSingle(); setPerfil(data); };
-  const traerGrupos = async () => { const { data } = await supabase.from("grupos").select("*").order("creado_en", { ascending: false }); if (data) setGrupos(data.map((g: any) => g.nombre)); };
+  
+  // NUEVA LÓGICA: Trae solo los grupos donde el usuario ES miembro
+  const traerMisGrupos = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { setMisGrupos([]); return; }
+    
+    // 1. Obtener nombres de mis grupos
+    const { data: membresias } = await supabase.from("miembros").select("grupo_nombre").eq("user_id", session.user.id);
+    if (!membresias || membresias.length === 0) { setMisGrupos([]); return; }
+    
+    // 2. Obtener detalles de esos grupos
+    const nombresGrupos = membresias.map(m => m.grupo_nombre);
+    const { data: gruposData } = await supabase.from("grupos").select("*").in("nombre", nombresGrupos);
+    if (gruposData) setMisGrupos(gruposData);
+  };
 
   const traerFeed = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -59,11 +82,46 @@ export default function Home() {
 
   const crearGrupo = async () => {
     if (nombreGrupo.trim() === "") return;
-    await supabase.from("grupos").insert([{ nombre: nombreGrupo }]);
+    // Ahora inserta con la descripción
+    await supabase.from("grupos").insert([{ nombre: nombreGrupo, descripcion: descripcionGrupo }]);
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) await supabase.from("miembros").insert([{ user_id: session.user.id, grupo_nombre: nombreGrupo }]);
-    setNombreGrupo(""); setMostrarPopup(false); traerGrupos(); traerFeed();
+    setNombreGrupo(""); setDescripcionGrupo(""); setMostrarPopup(false); traerMisGrupos(); traerFeed();
   };
+
+  // NUEVA FUNCIÓN: Unirse a un grupo desde la búsqueda
+  const unirseAGrupoDesdeBusqueda = async (nombre: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+    await supabase.from("miembros").insert([{ user_id: session.user.id, grupo_nombre: nombre }]);
+    // Actualizar UI temporalmente
+    setResultadosBusqueda(prev => prev.map(g => g.nombre === nombre ? {...g, yaEsMiembro: true, miembros: g.miembros + 1} : g));
+    traerMisGrupos(); traerFeed();
+  };
+
+  // NUEVA FUNCIÓN: Buscar grupos globales
+  const handleBuscarGlobal = async () => {
+    if (!busquedaGlobal.trim()) { setResultadosBusqueda([]); return; }
+    setBuscando(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Obtener grupos a los que ya pertenezco para marcarlos
+    const { data: misMembresias } = await supabase.from("miembros").select("grupo_nombre").eq("user_id", session?.user?.id || "");
+    const nombresMisGrupos = new Set(misMembresias?.map(m => m.grupo_nombre) || []);
+
+    const { data } = await supabase.from("grupos").select("*").ilike("nombre", `%${busquedaGlobal}%`).limit(8);
+    
+    if (data) {
+      // Enriquecer resultados con la cantidad de miembros
+      const enriquecidos = await Promise.all(data.map(async (g) => {
+        const { count } = await supabase.from("miembros").select("*", { count: 'exact', head: true }).eq("grupo_nombre", g.nombre);
+        return { ...g, miembros: count || 0, yaEsMiembro: nombresMisGrupos.has(g.nombre) };
+      }));
+      setResultadosBusqueda(enriquecidos);
+    }
+    setBuscando(false);
+  };
+
   const cerrarSesion = async () => { await supabase.auth.signOut(); };
 
   const toggleLikePost = async (postId: string) => {
@@ -142,6 +200,7 @@ export default function Home() {
 
   return (
     <main className="max-w-6xl mx-auto pt-6 px-4 flex gap-6">
+      {/* SIDEBAR PC */}
       <aside className="w-[280px] shrink-0 hidden lg:block">
         <div className="fixed w-[280px]">
           {perfil ? (
@@ -155,8 +214,17 @@ export default function Home() {
           ) : (<Link href="/login" className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors mb-1"><div className="w-9 h-9 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 font-bold text-sm">?</div><span className="font-medium text-[15px] text-[#1877F2]">Iniciar Sesion</span></Link>)}
           <hr className="my-2 border-gray-300" />
           <ul>
-            <li className="font-semibold text-gray-500 text-[13px] px-2 py-1 uppercase">Tus Grupos</li>
-            {grupos.map((grupo) => (<li key={grupo}><Link href={`/grupo/${grupo}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"><div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-lg">G</div><span className="text-[15px] text-gray-800 font-medium truncate">{grupo}</span></Link></li>))}
+            <li className="font-semibold text-gray-500 text-[13px] px-2 py-1 uppercase">Mis Grupos</li>
+            {/* Ahora recorremos misGrupos que son objetos */}
+            {misGrupos.length === 0 && <li className="px-2 py-1 text-sm text-gray-400 italic">Sin grupos todavía</li>}
+            {misGrupos.map((grupo) => (
+              <li key={grupo.nombre}>
+                <Link href={`/grupo/${grupo.nombre}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div className="w-9 h-9 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-lg">G</div>
+                  <span className="text-[15px] text-gray-800 font-medium truncate">{grupo.nombre}</span>
+                </Link>
+              </li>
+            ))}
             <li><button onClick={() => setMostrarPopup(true)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors w-full text-left"><div className="w-9 h-9 bg-gray-100 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center text-gray-500 text-xl">+</div><span className="text-[15px] text-[#1877F2] font-medium">Crear nuevo grupo</span></button></li>
           </ul>
           {usuario ? (<button onClick={cerrarSesion} className="mt-4 text-sm text-gray-400 hover:text-red-500 cursor-pointer">Cerrar sesion</button>) : null}
@@ -164,7 +232,7 @@ export default function Home() {
       </aside>
 
       <div className="flex-1 max-w-[600px]">
-        {/* --- BARRA MÓVIL (Solo se ve en celulares) --- */}
+        {/* BARRA MÓVIL */}
         <div className="flex lg:hidden flex-col gap-3 mb-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex justify-between items-center">
             {perfil ? (
@@ -180,24 +248,77 @@ export default function Home() {
             )}
             <div className="flex items-center gap-2">
               {usuario ? (<button onClick={cerrarSesion} className="text-xs text-gray-400 hover:text-red-500 cursor-pointer">Salir</button>) : null}
-              <button onClick={() => setMostrarPopup(true)} className="bg-[#1877F2] text-white px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer hover:bg-[#166FE5]">Crear Grupo</button>
+              <button onClick={() => setMostrarPopup(true)} className="bg-[#1877F2] text-white px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer hover:bg-[#166FE5]">Crear</button>
             </div>
           </div>
-          
-          {grupos.length > 0 && (
+          {misGrupos.length > 0 && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex gap-2 overflow-x-auto">
-              {grupos.map((grupo) => (
-                <Link key={grupo} href={`/grupo/${grupo}`} className="flex-shrink-0 px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-800 hover:bg-gray-200 transition-colors truncate max-w-[150px]">
-                  {grupo}
-                </Link>
+              {misGrupos.map((grupo) => (
+                <Link key={grupo.nombre} href={`/grupo/${grupo.nombre}`} className="flex-shrink-0 px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-800 hover:bg-gray-200 transition-colors truncate max-w-[150px]">{grupo.nombre}</Link>
               ))}
             </div>
           )}
         </div>
-        {/* --- FIN BARRA MÓVIL --- */}
 
+        {/* BARRA DE BÚSQUEDA GLOBAL */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-4 flex gap-2">
+          <input 
+            type="text" 
+            placeholder="Buscar comunidades para unirte..." 
+            className="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none text-sm text-gray-700 placeholder-gray-500"
+            value={busquedaGlobal}
+            onChange={(e) => setBusquedaGlobal(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleBuscarGlobal()}
+          />
+          <button onClick={handleBuscarGlobal} disabled={buscando} className="bg-[#1877F2] hover:bg-[#166FE5] text-white px-4 rounded-full font-medium text-sm cursor-pointer disabled:opacity-50">
+            {buscando ? "..." : "Buscar"}
+          </button>
+        </div>
+
+        {/* RESULTADOS DE BÚSQUEDA (ESTILO DISCORD) */}
+        {resultadosBusqueda.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            {resultadosBusqueda.map((grupo) => (
+              <div key={grupo.nombre} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                {/* Banner simulado con gradiente */}
+                <div className="h-20 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 w-full"></div>
+                <div className="p-4 border-t-4 border-white relative flex flex-col h-full">
+                  {/* Icono superpuesto */}
+                  <div className="absolute -top-6 left-4 w-12 h-12 bg-gray-800 rounded-xl flex items-center justify-center text-white text-xl font-bold shadow-md border-4 border-white">
+                    {grupo.nombre.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="mt-4 flex-1">
+                    <h3 className="font-bold text-gray-900 text-base">{grupo.nombre}</h3>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{grupo.descripcion || "Sin descripción disponible."}</p>
+                  </div>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                    <span className="text-xs text-gray-400 font-medium">{grupo.miembros} miembros</span>
+                    {grupo.yaEsMiembro ? (
+                      <span className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1 rounded-full">Ya eres miembro</span>
+                    ) : usuario ? (
+                      <button onClick={() => unirseAGrupoDesdeBusqueda(grupo.nombre)} className="text-xs font-bold text-[#1877F2] bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-full transition-colors">
+                        Unirse
+                      </button>
+                    ) : (
+                      <Link href="/login" className="text-xs font-bold text-[#1877F2] bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-full transition-colors">
+                        Iniciar sesión
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* FEED DE POSTS */}
         <div className="flex flex-col gap-4">
-          {feedPosts.length === 0 ? (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500"><p className="text-lg font-medium mb-2">Tu inicio esta vacio</p><p className="text-sm">Crea un grupo o unete a uno existente para ver publicaciones aqui.</p></div>) : (
+          {feedPosts.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500">
+              <p className="text-lg font-medium mb-2">Tu inicio está vacío</p>
+              <p className="text-sm">Usa la barra de búsqueda de arriba para encontrar comunidades y unirte a ellas.</p>
+            </div>
+          ) : (
             feedPosts.map((post) => (
               <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                 <div className="flex items-center gap-3 mb-3">
@@ -205,15 +326,12 @@ export default function Home() {
                   <div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1"><Link href={`/grupo/${post.grupo_nombre}`} className="font-semibold text-[#1877F2] hover:underline">{decodeURIComponent(post.grupo_nombre)}</Link> - {new Date(post.creado_en).toLocaleDateString()}</span></p></div>
                 </div>
                 <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? <>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
-                
                 {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
-
                 <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
                   <span onClick={() => toggleLikePost(post.id)} className={`px-3 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors text-xs sm:text-sm ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
                   <span onClick={() => toggleComentarios(post.id)} className={`px-3 py-1 rounded cursor-pointer text-xs sm:text-sm ${postsAbiertos.includes(post.id) ? "font-bold text-gray-900 bg-gray-100" : "hover:bg-gray-100"}`}>💬 Comment {Array.isArray(listaComentarios[post.id]) && listaComentarios[post.id].length > 0 ? `(${listaComentarios[post.id].length})` : ""}</span>
                   {post.user_id === usuario?.id ? (<span onClick={() => eliminarPost(post.id)} className="hover:bg-red-100 hover:text-red-600 text-gray-400 px-3 py-1 rounded cursor-pointer text-xs sm:text-sm">Delete</span>) : null}
                 </div>
-                
                 {postsAbiertos.includes(post.id) ? (
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="flex gap-2 mb-4">
@@ -248,16 +366,23 @@ export default function Home() {
         </div>
       </div>
 
+      {/* POPUP CREAR GRUPO (ACTUALIZADO CON DESCRIPCIÓN) */}
       {mostrarPopup ? (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-0 rounded-lg shadow-xl text-black max-w-md w-full mx-4 overflow-hidden">
-            <div className="bg-[#1877F2] p-4"><h2 className="text-xl font-bold text-white">Crear un grupo</h2><p className="text-sm text-blue-100">Unete a la comunidad</p></div>
-            <div className="p-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del grupo</label>
-              <input type="text" placeholder="Ej: Amantes del Cafe" className="w-full p-3 border border-gray-300 rounded-md mb-4 text-black focus:outline-none focus:border-[#1877F2] focus:ring-1 focus:ring-[#1877F2]" value={nombreGrupo} onChange={(e) => setNombreGrupo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && crearGrupo()} />
-              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+            <div className="bg-[#1877F2] p-4"><h2 className="text-xl font-bold text-white">Crear un grupo</h2><p className="text-sm text-blue-100">Dale una identidad a tu comunidad</p></div>
+            <div className="p-4 flex flex-col gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del grupo</label>
+                <input type="text" placeholder="Ej: Amantes del Cafe" className="w-full p-3 border border-gray-300 rounded-md text-black focus:outline-none focus:border-[#1877F2] focus:ring-1 focus:ring-[#1877F2]" value={nombreGrupo} onChange={(e) => setNombreGrupo(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción (Opcional)</label>
+                <textarea rows={3} placeholder="¿De qué trata este grupo?" className="w-full p-3 border border-gray-300 rounded-md text-black focus:outline-none focus:border-[#1877F2] focus:ring-1 focus:ring-[#1877F2] resize-none" value={descripcionGrupo} onChange={(e) => setDescripcionGrupo(e.target.value)} />
+              </div>
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-3">
                 <button className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-md font-medium cursor-pointer" onClick={() => setMostrarPopup(false)}>Cancelar</button>
-                <button className="bg-[#1877F2] hover:bg-[#166FE5] text-white py-2 px-4 rounded-md font-medium cursor-pointer" onClick={crearGrupo}>Crear</button>
+                <button className="bg-[#1877F2] hover:bg-[#166FE5] text-white py-2 px-4 rounded-md font-medium cursor-pointer" onClick={crearGrupo}>Crear Grupo</button>
               </div>
             </div>
           </div>
