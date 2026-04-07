@@ -77,10 +77,7 @@ export default function Home() {
     if (!postsData) return;
     const userIds = [...new Set(postsData.map((p: any) => p.user_id).filter(Boolean))];
     const { data: perfilesData } = await supabase.from("perfiles").select("id, avatar_url, username").in("id", userIds);
-    
-    // CORRECCIÓN AQUÍ: Falta el ) y el ] en el map
     const mapaPerfiles = new Map(perfilesData?.map((p: any) => [p.id, p]) || []);
-    
     const postIds = postsData.map((p: any) => p.id);
     const { data: todosLosLikes } = await supabase.from("likes_posts").select("post_id, user_id").in("post_id", postIds);
     const mapaLikesCount = new Map<string, number>();
@@ -92,6 +89,7 @@ export default function Home() {
 
   const limpiarPopup = () => { setNombreGrupo(""); setDescripcionGrupo(""); setArchivoMiniatura(null); setPreviewMiniatura(""); };
 
+  // ✅ FIX 3: session?.user?. idGrupo → session?.user?.id
   const crearGrupo = async () => {
     if (nombreGrupo.trim() === "" || creandoGrupo) return;
     setCreandoGrupo(true);
@@ -103,7 +101,7 @@ export default function Home() {
       if (!errorSubida) { const { data: urlData } = supabase.storage.from("grupo-thumbnails").getPublicUrl(path); thumbnailUrl = urlData.publicUrl; }
     }
     const { data: { session } } = await supabase.auth.getSession();
-    await supabase.from("grupos").insert([{ nombre: nombreGrupo, descripcion: descripcionGrupo, thumbnail_url: thumbnailUrl, creador_id: session?.user?. idGrupo }]);
+    await supabase.from("grupos").insert([{ nombre: nombreGrupo, descripcion: descripcionGrupo, thumbnail_url: thumbnailUrl, creador_id: session?.user?.id }]);
     if (session?.user) await supabase.from("miembros").insert([{ user_id: session.user.id, grupo_nombre: nombreGrupo, rol: 'admin' }]);
     setCreandoGrupo(false); limpiarPopup(); setMostrarPopup(false); traerMisGrupos(); traerFeed(); traerRecomendados();
   };
@@ -153,9 +151,10 @@ export default function Home() {
     setPostsAbiertos(nuevosAbiertos);
   };
 
+  // ✅ FIX 1: Agregada la } que faltaba en { data: { session } }
   const publicarComentario = async (postId: string) => {
     const textoActual = textosComentarios[postId] || "";
-    const { data: { session } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     if (textoActual.trim() === "" || !session?.user || !perfil) return;
     await supabase.from("comentarios").insert([{ post_id: postId, user_id: session.user.id, autor_username: perfil.username, mensaje: textoActual }]);
     const textosLimpios = { ...textosComentarios }; textosLimpios[postId] = ""; setTextosComentarios(textosLimpios);
@@ -172,7 +171,8 @@ export default function Home() {
     setListaComentarios((prevState) => { const newComments = { ...prevState }; newComments[postId] = newComments[postId].map((c: any) => c.id === comentarioId ? { ...c, score: c.score + cambioEnScore, userVote: votoActual === tipo ? 0 : tipo } : c).sort((a: any, b: any) => b.score - a.score); return newComments; });
   };
 
-  const toggleTextoExpandido = (setter: any, id: string) => { setter((prev: Set<string>) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }; };
+  // ✅ FIX 2: return n; };  →  return n; });   (faltaba ) para cerrar setter(...))
+  const toggleTextoExpandido = (setter: any, id: string) => { setter((prev: Set<string>) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }); };
 
   return (
     <main className="max-w-6xl mx-auto pt-6 px-4 flex gap-6 justify-center">
@@ -200,7 +200,7 @@ export default function Home() {
       <div className="flex-1 max-w-[600px] min-w-0">
         <div className="flex lg:hidden flex-col gap-3 mb-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex justify-between items-center">
-            {perfil ? (<Link href="/configurar-perfil" className="flex items-center gap-2"><img src={perfil.avatar_url} className="w-9 h-9 rounded-full border border-gray-200" alt="avatar"/><span className="font-semibold text-sm text-gray-800 truncate max-w-[120px]">{perfil.username}</span></Link>) : (<Link href="/login" className="text-[#1877F2] font-semibold text-sm flex items-center gap-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3-3h7a3 3 0 013 3 3v1" /></svg>Iniciar Sesion</Link>)}
+            {perfil ? (<Link href="/configurar-perfil" className="flex items-center gap-2"><img src={perfil.avatar_url} className="w-9 h-9 rounded-full border border-gray-200" alt="avatar"/><span className="font-semibold text-sm text-gray-800 truncate max-w-[120px]">{perfil.username}</span></Link>) : (<Link href="/login" className="text-[#1877F2] font-semibold text-sm flex items-center gap-1"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>Iniciar Sesion</Link>)}
             <div className="flex items-center gap-2">
               {usuario ? (<button onClick={cerrarSesion} className="text-xs text-gray-400 hover:text-red-500 cursor-pointer">Salir</button>) : null}
               <button onClick={() => setMostrarPopup(true)} className="bg-[#1877F2] text-white px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer hover:bg-[#166FE5]">Crear</button>
@@ -213,7 +213,7 @@ export default function Home() {
           {feedPosts.length === 0 ? (<div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500"><p className="text-lg font-medium mb-2">Tu inicio está vacío</p><p className="text-sm">Usa la barra de búsqueda de arriba para encontrar comunidades.</p></div>) : (feedPosts.map((post) => (
             <div key={post.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
               <div className="flex items-center gap-3 mb-3"><img src={post.autor_perfil?.avatar_url || "https://ui-avatars.com/api/?name=Anonimo&background=gray&color=fff"} className="w-10 h-10 rounded-full shrink-0" alt="avatar"/><div className="flex-1 min-w-0"><p className="font-semibold text-[15px] text-gray-900 truncate">{post.autor_perfil?.username || post.autor_username || "Anonimo"} <span className="font-normal text-xs text-gray-500 ml-1">{new Date(post.creado_en).toLocaleDateString()} - {new Date(post.creado_en).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}</span></p></div></div>
-              <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? (<>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button></p>
+              <p className="text-[15px] text-gray-800 mb-3 leading-relaxed">{(post.mensaje?.length > 200 && !postsExpandidos.has(post.id)) ? (<>{post.mensaje.substring(0, 200)}... <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm">Ver más</button></> : post.mensaje}{(post.mensaje?.length > 200 && postsExpandidos.has(post.id)) && <button onClick={() => toggleTextoExpandido(setPostsExpandidos, post.id)} className="text-[#1877F2] font-medium hover:underline text-sm ml-1">Ver menos</button>}</p>
               {post.imagen_url ? (post.imagen_url.includes('.gif') ? (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100 object-contain bg-black/5" alt="GIF" />) : (<img src={post.imagen_url} className="w-full rounded-lg mb-3 border border-gray-100" alt="Imagen del post" />)) : null}
               <div className="border-t border-gray-200 mt-2 pt-2 flex justify-between text-gray-500 text-sm">
                 <span onClick={() => toggleLikePost(post.id)} className={`px-3 py-1 rounded cursor-pointer flex items-center gap-1 transition-colors text-xs sm:text-sm ${likedPosts.has(post.id) ? 'bg-blue-50 text-blue-600 font-bold' : 'hover:bg-gray-100'}`}>{likedPosts.has(post.id) ? '👍 Liked' : '👍 Like'} ({post.likes || 0})</span>
@@ -258,9 +258,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* SIDEBAR DERECHO: RECOMENDADOS */}
       <aside className="w-[280px] shrink-0 hidden lg:block">
-        <div className="fixed w-[280px">
+        <div className="fixed w-[280px]">
           <div className="p-2"><h2 className="font-semibold text-gray-500 text-[13px] px-2 py-1 uppercase">Grupos Recomendados</h2></div>
           <ul>
             {gruposRecomendados.length === 0 && <li className="px-2 py-1 text-sm text-gray-400 italic px-4">No hay grupos aún.</li>}
@@ -280,7 +279,6 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* POPUP CREAR GRUPO */}
       {mostrarPopup && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-0 rounded-lg shadow-xl text-black max-w-md w-full mx-4 overflow-hidden">
@@ -289,7 +287,7 @@ export default function Home() {
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <input type="file" accept="image/png, image/jpeg" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={(e) => { const file = e.target.files[0]; if(file) { setArchivoMiniatura(file); setPreviewMiniatura(URL.createObjectURL(file)); } }} />
-                  <div className="w-16 h-16 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden">{previewMiniatura ? <img src={previewMiniatura} className="w-full h-full object-cover" alt="Preview"/> : <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div>}
+                  <div className="w-16 h-16 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden">{previewMiniatura ? <img src={previewMiniatura} className="w-full h-full object-cover" alt="Preview"/> : <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}</div>}
                 </div>
                 <div className="flex-1 text-sm text-gray-500">Sube una imagen de miniatura (Opcional).</div>
               </div>
