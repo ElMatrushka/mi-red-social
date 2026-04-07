@@ -54,11 +54,11 @@ export default function PaginaGrupo() {
   const comprobarMembresia = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) { 
-      setEsMiembro(false); // <-- LÍNEA 58 REALMENTE ARREGLADA (antes decía setEsMibero)
+      setEsMiembro(false); 
       return; 
     }
     const { data } = await supabase.from("miembros").select("id").eq("user_id", session.user.id).eq("grupo_nombre", idGrupo);
-    setEsMiembro(data && data.length > 0);
+    setEsMiembro(!!(data && data.length > 0)); // <-- AQUÍ ESTÁ EL FIX DE TYPESCRIPT
   };
 
   const traerPosts = async () => {
@@ -113,7 +113,7 @@ export default function PaginaGrupo() {
 
   const seleccionarGif = (url: string) => {
     setImagenPreview(url);
-    setArchivoASubir(null); // <-- SOLUCIÓN: Limpiar archivo local por si el usuario cambió de opinión
+    setArchivoASubir(null); 
     setMostrarBuscadorGif(false);
     setBusquedaGif("");
   };
