@@ -45,7 +45,7 @@ export default function SearchBar({ onClose }: { onClose?: () => void }) {
     if (!session?.user) return;
     await supabase.from("miembros").insert([{ user_id: session.user.id, grupo_nombre: nombre }]);
     setResults(prev => prev.map(g => g.nombre === nombre ? {...g, yaEsMiembro: true, miembros: g.miembros + 1} : g));
-    window.dispatchEvent(new CustomEvent('grupo-actualizado')); // Avisar a la página principal
+    window.dispatchEvent(new CustomEvent('grupo-actualizado'));
   };
 
   return (
@@ -72,21 +72,24 @@ export default function SearchBar({ onClose }: { onClose?: () => void }) {
           ) : (
             results.map((grupo) => (
               <div key={grupo.nombre} className="flex items-center gap-3 p-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
-                <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center text-gray-400">
+                {/* IMAGEN Y NOMBRE AHORA SON UN LINK PARA VER EL GRUPO DIRECTAMENTE */}
+                <Link href={`/grupo/${grupo.nombre}`} onClick={() => { setIsOpen(false); if(onClose) onClose(); }} className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center text-gray-400">
                   {grupo.thumbnail_url ? (
                     <img src={grupo.thumbnail_url} className="w-full h-full object-cover" alt="" />
                   ) : (
                     <span className="text-lg font-bold">{grupo.nombre.charAt(0).toUpperCase()}</span>
                   )}
-                </div>
+                </Link>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-gray-900 truncate">{grupo.nombre}</p>
+                  <Link href={`/grupo/${grupo.nombre}`} onClick={() => { setIsOpen(false); if(onClose) onClose(); }} className="font-semibold text-sm text-gray-900 truncate hover:underline block">{grupo.nombre}</Link>
                   <p className="text-xs text-gray-500 truncate">{grupo.descripcion || "Sin descripción"} • {grupo.miembros} miembros</p>
                 </div>
+                
+                {/* BOTÓN LATERAL */}
                 {grupo.yaEsMiembro ? (
-                  <Link href={`/grupo/${grupo.nombre}`} onClick={() => setIsOpen(false)} className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full shrink-0">
-                    Ver
-                  </Link>
+                  <span className="text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-full shrink-0">
+                    Miembro
+                  </span>
                 ) : (
                   <button onClick={() => unirse(grupo.nombre)} className="text-xs font-bold text-[#1877F2] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full shrink-0">
                     Unirse
